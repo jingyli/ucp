@@ -83,14 +83,6 @@
             "type": "string"
           },
           "description": "Discount codes to apply. Case-insensitive. Replaces previously submitted codes. Send empty array to clear."
-        },
-        "applied": {
-          "type": "array",
-          "readOnly": true,
-          "items": {
-            "$ref": "#/$defs/applied_discount"
-          },
-          "description": "Discounts successfully applied (code-based and automatic)."
         }
       }
     },

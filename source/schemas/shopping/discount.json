@@ -75,9 +75,9 @@
         },
         "applied": {
           "type": "array",
-          "readOnly": true,
           "items": { "$ref": "#/$defs/applied_discount" },
-          "description": "Discounts successfully applied (code-based and automatic)."
+          "description": "Discounts successfully applied (code-based and automatic).",
+          "ucp_request": "omit"
         }
       }
     },
@@ -90,7 +90,7 @@
         {
           "type": "object",
           "properties": {
-            "discounts": { 
+            "discounts": {
               "$ref": "#/$defs/discounts_object",
               "ucp_request": "optional"
             }

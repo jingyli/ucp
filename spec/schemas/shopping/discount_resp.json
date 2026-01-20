@@ -86,7 +86,6 @@
         },
         "applied": {
           "type": "array",
-          "readOnly": true,
           "items": {
             "$ref": "#/$defs/applied_discount"
           },
