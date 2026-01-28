@@ -1147,20 +1147,7 @@ Content-Type: application/json
 
 The following headers are defined for the HTTP binding and apply to all operations unless otherwise noted.
 
-**Request Headers**
-
-| Header              | Required | Description                                                                                                                                                                                   |
-| ------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Authorization`     | No       | Should contain oauth token representing the following 2 schemes: 1. Platform self authenticating (client_credentials). 2. Platform authenticating on behalf of end user (authorization_code). |
-| `X-API-Key`         | No       | Authenticates the platform with a reusable api key allocated to the platform by the business.                                                                                                 |
-| `Request-Signature` | **Yes**  | Ensure the authenticity and integrity of an HTTP message.                                                                                                                                     |
-| `Idempotency-Key`   | **Yes**  | Ensures duplicate operations don't happen during retries.                                                                                                                                     |
-| `Request-Id`        | **Yes**  | For tracing the requests across network layers and components.                                                                                                                                |
-| `User-Agent`        | No       | Identifies the user agent string making the call.                                                                                                                                             |
-| `Content-Type`      | No       | Representation Metadata. Tells the receiver what the data in the message body actually is.                                                                                                    |
-| `Accept`            | No       | Content Negotiation. The client tells the server what data formats it is capable of understanding.                                                                                            |
-| `Accept-Language`   | No       | Localization. Tells the receiver the user's preferred natural languages, often with "weights" or priorities.                                                                                  |
-| `Accept-Encoding`   | No       | Compression. The client tells the server which content-codings it supports, usually for compression                                                                                           |
+**Error processing OpenAPI:** [Errno 2] No such file or directory: 'source/services/shopping/rest.openapi.json'
 
 ### Specific Header Requirements
 
@@ -1183,27 +1170,48 @@ UCP uses standard HTTP status codes to indicate the success or failure of an API
 | `400 Bad Request`           | The request was invalid or cannot be served.                                       |
 | `401 Unauthorized`          | Authentication is required and has failed or has not been provided.                |
 | `403 Forbidden`             | The request is authenticated but the user does not have the necessary permissions. |
-| `404 Not Found`             | The requested resource could not be found.                                         |
 | `409 Conflict`              | The request could not be completed due to a conflict (e.g., idempotent key reuse). |
+| `422 Unprocessable Entity`  | The profile content is malformed (discovery failure).                              |
+| `424 Failed Dependency`     | The profile URL is valid but fetch failed (discovery failure).                     |
 | `429 Too Many Requests`     | Rate limit exceeded.                                                               |
 | `503 Service Unavailable`   | Temporary unavailability.                                                          |
 | `500 Internal Server Error` | An unexpected condition was encountered on the server.                             |
 
 ### Error Responses
 
-Error responses follow the standard UCP error structure:
+See the [Core Specification](https://ucp.dev/draft/specification/overview/#error-handling) for negotiation error handling (discovery failures, negotiation failures).
+
+#### Business Outcomes
+
+Business outcomes (including errors like unavailable merchandise) are returned with HTTP 200 and the UCP envelope containing `messages`:
 
 ```json
 {
-  "status": "requires_escalation",
+  "ucp": {
+    "version": "2026-01-11",
+    "capabilities": {
+      "dev.ucp.shopping.checkout": [{"version": "2026-01-11"}]
+    }
+  },
+  "id": "checkout_abc123",
+  "status": "incomplete",
+  "line_items": [
+    {
+      "id": "item_456",
+      "quantity": 100,
+      "available_quantity": 12
+    }
+  ],
   "messages": [
     {
       "type": "error",
-      "code": "invalid_cart_items",
-      "content": "One or more cart items are invalid",
+      "code": "INSUFFICIENT_STOCK",
+      "content": "Requested 100 units but only 12 available",
       "severity": "requires_buyer_input",
+      "path": "$.line_items[0].quantity"
     }
-  ]
+  ],
+  "continue_url": "https://merchant.com/checkout/checkout_abc123"
 }
 ```
 

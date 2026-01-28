@@ -1,7 +1,5 @@
 # AP2 Mandates Extension
 
-**Version:** `2026-01-11`
-
 ## Overview
 
 The AP2 Mandates extension enables the secure exchange of user intents and authorizations using **Verifiable Digital Credentials**. It extends the standard Shopping Service Checkout capability to support the **[AP2 Protocol](https://ap2-protocol.org/)**.
@@ -175,7 +173,7 @@ Once the `dev.ucp.shopping.ap2_mandate` capability is negotiated, the session is
 
 The platform initiates the session. The business returns the `Checkout` object with `ap2.merchant_authorization` embedded in the response body.
 
-**Error:** Schema file 'ap2_mandate.json' not found in any schema directory.
+**Error:** Definition '#/$defs/checkout' not found in 'source/schemas/shopping/ap2_mandate.json'
 
 **Example Response:**
 
@@ -252,7 +250,9 @@ The business trusts the Credential Issuer (Bank) and verifies the user's Key Bin
 
 Once the mandates are generated, the platform submits them in the completion request:
 
-**Error:** Schema file 'ap2_mandate.json' not found in any schema directory.
+| Name             | Type                                                                    | Required | Description                                      |
+| ---------------- | ----------------------------------------------------------------------- | -------- | ------------------------------------------------ |
+| checkout_mandate | [Checkout Mandate](/draft/specification/ap2-mandates/#checkout-mandate) | No       | SD-JWT+kb proving user authorized this checkout. |
 
 ```json
 {
@@ -328,27 +328,37 @@ The business passes the `token` (composite object) to their Payment Handler / PS
 
 ### Business Authorization
 
-**Error:** Schema file 'ap2_mandate.json' not found in any schema directory.
+JWS Detached Content signature (RFC 7515 Appendix F) over the checkout response body (excluding ap2 field). Format: `<base64url-header>..<base64url-signature>`. The header MUST contain 'alg' (ES256/ES384/ES512) and 'kid' claims. The signature covers both the header and JCS-canonicalized checkout payload.
+
+**Pattern:** `^[A-Za-z0-9_-]+\.\.[A-Za-z0-9_-]+$`
 
 ### AP2 Checkout Response
 
 The `ap2` object included in checkout responses.
 
-**Error:** Schema file 'ap2_mandate.json' not found in any schema directory.
+| Name                   | Type                                                                                | Required | Description                                                |
+| ---------------------- | ----------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------- |
+| merchant_authorization | [Merchant Authorization](/draft/specification/ap2-mandates/#merchant-authorization) | No       | Merchant's signature proving checkout terms are authentic. |
 
 ### Checkout Mandate
 
-**Error:** Schema file 'ap2_mandate.json' not found in any schema directory.
+SD-JWT+kb credential in `ap2.checkout_mandate`. Proving user authorization for the checkout. Contains the full checkout including `ap2.merchant_authorization`.
+
+**Pattern:** `^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+(~[A-Za-z0-9_-]+)*$`
 
 ### AP2 Complete Request
 
 The `ap2` object included in COMPLETE checkout requests.
 
-**Error:** Schema file 'ap2_mandate.json' not found in any schema directory.
+| Name             | Type                                                                    | Required | Description                                      |
+| ---------------- | ----------------------------------------------------------------------- | -------- | ------------------------------------------------ |
+| checkout_mandate | [Checkout Mandate](/draft/specification/ap2-mandates/#checkout-mandate) | No       | SD-JWT+kb proving user authorized this checkout. |
 
 ### Error Codes
 
-**Error:** Schema file 'ap2_mandate.json' not found in any schema directory.
+Error codes specific to AP2 mandate verification.
+
+**Enum:** `mandate_required`, `agent_missing_key`, `mandate_invalid_signature`, `mandate_expired`, `mandate_scope_mismatch`, `merchant_authorization_invalid`, `merchant_authorization_missing`
 
 | Error Code                       | Description                                                       |
 | -------------------------------- | ----------------------------------------------------------------- |
@@ -358,4 +368,3 @@ The `ap2` object included in COMPLETE checkout requests.
 | `mandate_expired`                | The mandate `exp` timestamp has passed.                           |
 | `mandate_scope_mismatch`         | The mandate is bound to a different checkout.                     |
 | `merchant_authorization_invalid` | The business authorization signature could not be verified.       |
-| `merchant_authorization_missing` | AP2 negotiated but response lacks `ap2.merchant_authorization`.   |
