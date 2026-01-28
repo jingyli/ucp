@@ -201,14 +201,14 @@ for `postMessage()` calls — before the `ect.ready` message is sent.
 Core messages are defined by the ECaP specification and **MUST** be supported by
 all implementations.
 
-| Category          | Communication Direction | Purpose                                                               | Pattern      | Core Messages                                                                             |
-| :---------------- | :---------------------- | :---------------------------------------------------------------------| :----------- | :---------------------------------------------------------------------------------------- |
-| **Handshake**     | Embedded Cart -> Host   | Establish connection between host and Embedded Cart.                  | Request      | `ect.ready`                                                                               |
-| **Authentication**| Host -> Embedded Cart   | Inform any additional auth data required by Embedded Cart from host.  | Notification | `ect.auth`                                                                                |
-| **Lifecycle**     | Embedded Cart -> Host   | Inform of cart state in Embedded Cart.                                | Notification | `ect.start`                                                                               |
-| **Transition**    | Embedded Cart -> Host   | Establish transition from cart to other capabilities.                 | Request      | `ect.transition.checkout`                                                                 |
-| **State Change**  | Embedded Cart -> Host   | Inform of cart field changes.                                         | Notification | `ect.line_items.change`, `ect.buyer.change`, `ect.context.change`, `ect.messages.change`  |
-| **State Change**  | Embedded Cart -> Host   | Inform of cart field changes but also require host input.             | Request      | `ect.line_items.change_request`                                                           |
+| Category          | Communication Direction | Purpose                                                                   | Pattern                | Core Messages                                                                             |
+| :---------------- | :---------------------- | :------------------------------------------------------------------------ | :--------------------- | :---------------------------------------------------------------------------------------- |
+| **Handshake**     | Embedded Cart -> Host   | Establish connection between host and Embedded Cart.                      | Request                | `ect.ready`                                                                               |
+| **Authentication**| Host <-> Embedded Cart  | Communicate auth data exchanges between Embedded Cart and host.           | Notification & Request | `ect.auth` (Request), `ect.auth.change` (Notification)                                    |
+| **Lifecycle**     | Embedded Cart -> Host   | Inform of cart state in Embedded Cart.                                    | Notification           | `ect.start`                                                                               |
+| **Transition**    | Embedded Cart -> Host   | Establish transition from cart to other capabilities.                     | Request                | `ect.transition.checkout`                                                                 |
+| **State Change**  | Embedded Cart -> Host   | Inform of cart field changes.                                             | Notification           | `ect.line_items.change`, `ect.buyer.change`, `ect.context.change`, `ect.messages.change`  |
+| **State Change**  | Embedded Cart -> Host   | Inform of cart field changes but also require host input.                 | Request                | `ect.line_items.change_request`                                                           |
 
 ### Handshake Messages
 
@@ -291,26 +291,92 @@ channel.
 
 #### `ect.auth`
 
-Informs Embedded Cart of any required auth data from host per business
+Exchange any required auth data from host per business
 requirements (i.e. when identity linking is a pre-requisite).
 
 - **Direction:** Host → Embedded Cart
-- **Type:** Notification
+- **Type:** Request
 - **Payload:**
     - `authorization` (string, **REQUIRED**): The required authorization data by
     business, can be in the form of an OAuth token, JWT, API keys, etc.
 
-**Example Message (no cart object specified):**
+**Example Message:**
 
 ```json
 {
     "jsonrpc": "2.0",
+    "id": "auth_1",
     "method": "ect.auth",
     "params": {
         "authorization": "fake_token_from_identity_linking"
     }
 }
 ```
+
+The `ect.auth` message is a request, which means that Embedded Cart
+**MUST** respond to acknowledge receiving the authorization.
+
+- **Direction:** Embedded Cart → host
+- **Type:** Response
+- **Result Payload:**
+    - Empty payload means the exchange is successful (Embedded Cart
+    is able to ingest the authorization shared by the host).
+
+**Example Message:**
+
+```json
+{
+    "jsonrpc": "2.0",
+    "id": "auth_1",
+    "result": {}
+}
+```
+
+Embedded Cart **MAY** respond with errors if the ingestion of
+the authorization is not successful.
+
+**Example Message (errors):**
+
+```json
+{
+    "jsonrpc": "2.0",
+    "id": "auth_1",
+    "error": {...}
+}
+```
+
+Embedded Cart **SHOULD** use error codes mapped to
+**[W3C DOMException](https://webidl.spec.whatwg.org/#idl-DOMException)** names
+where possible.
+
+#### `ect.auth.change`
+
+Informs host that auth state has changed on Embedded Cart side. A common
+example would be when OAuth access token has expired.
+
+- **Direction:** Embedded Cart → host
+- **Type:** Notification
+- **Payload:**
+    - `require_reauth` (boolean, **REQUIRED**): This boolean bit indicates
+    whether business requires another auth exchange via `ect.auth` with
+    host as a result of the auth state change.
+
+**Example Message:**
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "ect.auth.change",
+    "params": {
+        "require_reauth": true
+    }
+}
+```
+
+When a notification is received indicating reauth is required,
+host **MUST** reprepare relevant authorization per business
+requirements and initiate an `ect.auth`
+request back to Embedded Cart.
 
 ### Lifecycle Messages
 
@@ -421,7 +487,7 @@ documentation](site:specification/embedded-checkout/#delegation) for more detail
 ```
 
 When the host responds with a `delegate` array, the Embedded Cart **MUST**
-use it to instantiate the handshake on ECP.x
+use it to instantiate the handshake on ECP.
 
 ### State Change Messages
 

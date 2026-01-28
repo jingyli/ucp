@@ -276,7 +276,7 @@
 
     {
       "name": "ect.auth",
-      "summary": "Handshake from host to business",
+      "summary": "Authorization exchange between host & business.",
       "description": "Augments Embedded Cart Protocol by doing an additional auth exchanges per business requirement.",
       "params": [
         {
@@ -284,6 +284,30 @@
           "required": true,
           "schema": {
             "type": "string"
+          }
+        }
+      ],
+      "result": {
+        "name": "authResult",
+        "schema": {
+          "type": "object",
+          "description": "Auth response from business. Empty result is equivalent to a successful auth exchange.",
+          "maxProperties": 0
+        }
+      }
+    },
+
+    {
+      "name": "ect.auth.change",
+      "summary": "Auth state changed.",
+      "description": "Business notifies host that the previously exchanged authorization has changed and whether or not a new exchange is required before the flow can continue.",
+      "params": [
+        {
+          "name": "require_reauth",
+          "required": true,
+          "schema": {
+            "type": "boolean",
+            "description": "Whether or not business requires another auth exchange with host as a result of the auth state change."
           }
         }
       ]
