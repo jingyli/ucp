@@ -208,7 +208,6 @@ all implementations.
 | **Lifecycle**     | Embedded Cart -> Host   | Inform of cart state in Embedded Cart.                                    | Notification           | `ect.start`                                                                               |
 | **Transition**    | Embedded Cart -> Host   | Establish transition from cart to other capabilities.                     | Request                | `ect.transition.checkout`                                                                 |
 | **State Change**  | Embedded Cart -> Host   | Inform of cart field changes.                                             | Notification           | `ect.line_items.change`, `ect.buyer.change`, `ect.context.change`, `ect.messages.change`  |
-| **State Change**  | Embedded Cart -> Host   | Inform of cart field changes but also require host input.                 | Request                | `ect.line_items.change_request`                                                           |
 
 ### Handshake Messages
 
@@ -616,90 +615,6 @@ informational notices about the cart state.
     }
 }
 ```
-
-### State Change Messages Requesting for Host Input
-
-ECaP support specific state change messages that also require host
-input. We consider these as change message requests where the UI update
-occurred partially and depending on host response, the final changes
-occur in Embedded Cart.
-
-#### `ec.line_items.change_request`
-
-Embedded Cart would like to request line items modifications (quantity
-changed, items added/removed) in the cart UI. However, it's waiting
-for host input (i.e. validating the update to see if it's compliant
-with host's requirement) before applying the changes. Embedded Cart
-**MUST NOT** fully apply the changes without receiving a response
-from the host.
-
-- **Direction:** Embedded Cart → host
-- **Type:** Request
-- **Payload:**
-    - `cart`: The latest state of the cart containing the line item
-    change request
-
-```json
-{
-    "jsonrpc": "2.0",
-    "method": "ect.line_items.change_request",
-    "params": {
-        "cart": {
-            "id": "cart_123",
-            // The entire cart object is provided, including the updated line item request and their accompanying totals
-            "totals": [
-                /* ... */
-            ],
-            "line_items": [
-                /* ... */
-            ]
-            // ...
-        }
-    }
-}
-```
-
-The `ect.line_items.change_request` message is a request, which means that
-the host **MUST** respond with some inputs to complete the change request.
-
-- **Direction:** host → Embedded Cart
-- **Type:** Response
-- **Result Payload:**
-    - `cart`: The partial update containing line items that are accepted
-    by the host from the change request.
-
-**Example Message:**
-
-```json
-{
-    "jsonrpc": "2.0",
-    "id": "items_change_request_1",
-    "result": {
-        "cart": {
-            "line_items": [
-                /* ... */
-            ]
-        }
-    }
-}
-```
-
-**Example Error Response:**
-
-```json
-{
-    "jsonrpc": "2.0",
-    "id": "items_change_request_1",
-    "error": {
-        "code": "abort_error",
-        "message": "None of the items passed validation and the change request should be aborted."
-    }
-}
-```
-
-Embedded Cart **SHOULD** complete changes based on result received from
-the host and **MUST** trigger a subsequent `ect.line_items.change` message
-to indicate the final state of the line items in the cart.
 
 ### Security for Web-Based Hosts
 
