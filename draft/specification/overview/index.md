@@ -99,7 +99,7 @@ The `endpoint` field provides the base URL for API calls. OpenAPI paths are appe
 {
   "version": "2026-01-11",
   "transport": "rest",
-  "schema": "https://ucp.dev/services/shopping/rest.openapi.json",
+  "schema": "https://ucp.dev/services/shopping/openapi.json",
   "endpoint": "https://business.example.com/api/v2"
 }
 ```
@@ -124,7 +124,14 @@ A **capability** is a feature within a service. It declares what functionality i
 
 #### Capability Definition
 
-**Error:** Definition '#/$defs/discovery' not found in 'source/schemas/capability.json'
+| Name    | Type    | Required | Description                                                                                                                     |
+| ------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| version | string  | No       | Entity version in YYYY-MM-DD format.                                                                                            |
+| spec    | string  | **Yes**  | URL to human-readable specification document.                                                                                   |
+| schema  | string  | **Yes**  | URL to JSON Schema defining this entity's structure and payloads.                                                               |
+| id      | string  | No       | Unique identifier for this entity instance. Used to disambiguate when multiple instances exist.                                 |
+| config  | object  | No       | Entity-specific configuration. Structure defined by each entity's schema.                                                       |
+| extends | OneOf[] | No       | Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions. |
 
 #### Extensions
 
@@ -257,7 +264,7 @@ Businesses publish their profile at `/.well-known/ucp`. An example:
           "spec": "https://ucp.dev/specification/overview",
           "transport": "rest",
           "endpoint": "https://business.example.com/ucp/v1",
-          "schema": "https://ucp.dev/services/shopping/rest.openapi.json"
+          "schema": "https://ucp.dev/services/shopping/openapi.json"
         },
         {
           "version": "2026-01-11",
@@ -312,6 +319,14 @@ Businesses publish their profile at `/.well-known/ucp`. An example:
           "version": "2026-01-11",
           "spec": "https://example.com/specs/payments/processor_tokenizer",
           "schema": "https://example.com/specs/payments/merchant_tokenizer.json",
+          "available_instruments": [
+            {
+              "type": "card",
+              "constraints": {
+                "brands": ["visa", "mastercard", "amex"]
+              }
+            }
+          ],
           "config": {
             "type": "CARD",
             "tokenization_specification": {
@@ -339,7 +354,7 @@ Businesses publish their profile at `/.well-known/ucp`. An example:
 }
 ```
 
-The `ucp` object contains protocol metadata: version, services, capabilities, and payment handlers. The `signing_keys` array contains public keys (JWK format) used to verify signatures on webhooks and other authenticated messages from the business.
+The `ucp` object contains protocol metadata: version, services, capabilities, and payment handlers. The `signing_keys` array contains public keys (JWK format) used to verify signatures on webhooks and other authenticated messages from the business. See [Key Discovery](#key-discovery) for key lookup and resolution, and [Message Signatures](https://ucp.dev/draft/specification/signatures/index.md) for signing mechanics.
 
 #### Platform Profile
 
@@ -355,7 +370,7 @@ Platform profiles are similar and include signing keys for capabilities requirin
           "version": "2026-01-11",
           "spec": "https://ucp.dev/specification/overview",
           "transport": "rest",
-          "schema": "https://ucp.dev/services/shopping/rest.openapi.json"
+          "schema": "https://ucp.dev/services/shopping/openapi.json"
         }
       ]
     },
@@ -400,7 +415,10 @@ Platform profiles are similar and include signing keys for capabilities requirin
           "id": "shop_pay_1234",
           "version": "2026-01-11",
           "spec": "https://shopify.dev/ucp/shop-pay-handler",
-          "schema": "https://shopify.dev/ucp/schemas/shop-pay-config.json"
+          "schema": "https://shopify.dev/ucp/schemas/shop-pay-config.json",
+          "available_instruments": [
+            {"type": "shop_pay"}
+          ]
         }
       ],
       "dev.ucp.processor_tokenizer": [
@@ -408,7 +426,10 @@ Platform profiles are similar and include signing keys for capabilities requirin
           "id": "processor_tokenizer",
           "version": "2026-01-11",
           "spec": "https://example.com/specs/payments/processor_tokenizer-payment",
-          "schema": "https://ucp.dev/schemas/payments/delegate-payment.json"
+          "schema": "https://ucp.dev/schemas/payments/delegate-payment.json",
+          "available_instruments": [
+            {"type": "card", "constraints": {"brands": ["visa", "mastercard"]}}
+          ]
         }
       ]
     }
@@ -446,16 +467,18 @@ Content-Type: application/json
 ```json
 {
   "jsonrpc": "2.0",
-  "method": "create_checkout",
+  "method": "tools/call",
   "params": {
-    "meta": {
-      "ucp-agent": {
-        "profile": "https://agent.example/profiles/shopping-agent.json"
+    "name": "create_checkout",
+    "arguments": {
+      "meta": {
+        "ucp-agent": {
+          "profile": "https://agent.example/profiles/shopping-agent.json"
+        }
       },
-      "idempotency-key": "550e8400-e29b-41d4-a716-446655440000"
-    },
-    "checkout": {
-      "line_items": [...]
+      "checkout": {
+        "line_items": [...]
+      }
     }
   },
   "id": 1
@@ -509,13 +532,40 @@ These failure types require different handling:
 
 ##### Error Codes
 
+**Negotiation Errors:**
+
 | Code                        | Description                                          | REST | MCP    |
 | --------------------------- | ---------------------------------------------------- | ---- | ------ |
-| `INVALID_PROFILE_URL`       | Profile URL is malformed, missing, or unresolvable   | 400  | error  |
-| `PROFILE_UNREACHABLE`       | Resolved URL but fetch failed (timeout, non-2xx)     | 424  | error  |
-| `PROFILE_MALFORMED`         | Fetched content is not valid JSON or violates schema | 422  | error  |
-| `CAPABILITIES_INCOMPATIBLE` | No compatible capabilities in intersection           | 200  | result |
-| `VERSION_UNSUPPORTED`       | Platform's UCP version is not supported              | 200  | result |
+| `invalid_profile_url`       | Profile URL is malformed, missing, or unresolvable   | 400  | -32001 |
+| `profile_unreachable`       | Resolved URL but fetch failed (timeout, non-2xx)     | 424  | -32001 |
+| `profile_malformed`         | Fetched content is not valid JSON or violates schema | 422  | -32001 |
+| `capabilities_incompatible` | No compatible capabilities in intersection           | 200  | result |
+| `version_unsupported`       | Platform's UCP version is not supported              | 200  | result |
+
+**Signature Errors:**
+
+| Code                    | Description                                       | REST | MCP    |
+| ----------------------- | ------------------------------------------------- | ---- | ------ |
+| `signature_missing`     | Required signature header/field not present       | 401  | -32000 |
+| `signature_invalid`     | Signature verification failed                     | 401  | -32000 |
+| `key_not_found`         | Key ID not found in signer's `signing_keys`       | 401  | -32000 |
+| `digest_mismatch`       | Body digest doesn't match `Content-Digest` header | 400  | -32600 |
+| `algorithm_unsupported` | Signature algorithm not supported                 | 400  | -32600 |
+
+See [Message Signatures](https://ucp.dev/draft/specification/signatures/index.md) for signature verification details.
+
+**Protocol Errors:**
+
+| HTTP | Description                                    | MCP    |
+| ---- | ---------------------------------------------- | ------ |
+| 401  | Authentication required or credentials invalid | -32000 |
+| 403  | Authenticated but insufficient permissions     | -32000 |
+| 409  | Idempotency key reused with different payload  | -32000 |
+| 429  | Too many requests                              | -32000 |
+| 500  | Unexpected server error                        | -32603 |
+| 503  | Server temporarily unable to handle requests   | -32000 |
+
+For MCP over HTTP, the HTTP status code is the primary signal; the JSON-RPC `error.code` provides a secondary signal. Both transports **SHOULD** include `Retry-After` header (REST) or `error.data.retry_after` (MCP) for 429 and 503 responses.
 
 ##### The `continue_url` Field
 
@@ -536,7 +586,7 @@ HTTP/1.1 424 Failed Dependency
 Content-Type: application/json
 
 {
-  "code": "PROFILE_UNREACHABLE",
+  "code": "profile_unreachable",
   "content": "Unable to fetch agent profile: connection timeout",
   "continue_url": "https://merchant.com/cart"
 }
@@ -556,14 +606,30 @@ Content-Type: application/json
   "messages": [
     {
       "type": "error",
-      "code": "VERSION_UNSUPPORTED",
-      "content": "Platform UCP version 2024-01-01 is not supported",
+      "code": "version_unsupported",
+      "content": "UCP version 2024-01-01 is not supported",
       "severity": "requires_buyer_input"
     }
   ],
-  "continue_url": "https://merchant.com/cart"
+  "continue_url": "https://merchant.com"
 }
 ```
+
+**Protocol Error — Rate Limit (429):**
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
+```
+
+**Protocol Error — Unauthorized (401):**
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer realm="ucp"
+```
+
+Protocol errors use standard HTTP status codes and headers. Response bodies are optional.
 
 **Discovery Failure (JSON-RPC error):**
 
@@ -575,7 +641,7 @@ Content-Type: application/json
     "code": -32001,
     "message": "UCP discovery failed",
     "data": {
-      "code": "PROFILE_UNREACHABLE",
+      "code": "profile_unreachable",
       "content": "Unable to fetch agent profile: connection timeout",
       "continue_url": "https://merchant.com/cart"
     }
@@ -590,22 +656,58 @@ Content-Type: application/json
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
-    "ucp": {
-      "version": "2026-01-11",
-      "capabilities": {}
+    "structuredContent": {
+      "ucp": {
+        "version": "2026-01-11",
+        "capabilities": {}
+      },
+      "messages": [
+        {
+          "type": "error",
+          "code": "version_unsupported",
+          "content": "UCP version 2024-01-01 is not supported",
+          "severity": "requires_buyer_input"
+        }
+      ],
+      "continue_url": "https://merchant.com"
     },
-    "messages": [
-      {
-        "type": "error",
-        "code": "VERSION_UNSUPPORTED",
-        "content": "Platform UCP version 2024-01-01 is not supported",
-        "severity": "requires_buyer_input"
-      }
-    ],
-    "continue_url": "https://merchant.com/cart"
+    "content": [
+      {"type": "text", "text": "{\"ucp\":{...},\"messages\":[...],\"continue_url\":\"...\"}"}
+    ]
   }
 }
 ```
+
+**Protocol Error — Rate Limit (JSON-RPC error):**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32000,
+    "message": "Rate limit exceeded",
+    "data": {
+      "retry_after": 60
+    }
+  }
+}
+```
+
+**Protocol Error — Unauthorized (JSON-RPC error):**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32000,
+    "message": "Unauthorized"
+  }
+}
+```
+
+When using Streamable HTTP transport, servers **MUST** return the corresponding HTTP status code (e.g., `429` for rate limit) alongside the JSON-RPC error. The HTTP status code is the primary signal for error type.
 
 #### Capability Declaration in Responses
 
@@ -625,7 +727,7 @@ The `capabilities` registry in responses indicates active capabilities:
     },
     "payment_handlers": {
       "com.example.processor_tokenizer": [
-        {"id": "processor_tokenizer", "version": "2026-01-11"}
+        {"id": "processor_tokenizer", "version": "2026-01-11", "available_instruments": [{"type": "card"}]}
       ]
     }
   },
@@ -661,6 +763,81 @@ An extension is relevant if **any** of its `extends` values matches a relevant r
 | Checkout      | checkout, discount, fulfillment | cart, order                  |
 | Cart          | cart, discount                  | checkout, fulfillment, order |
 | Order         | order                           | checkout, cart, discount     |
+
+## Identity & Authentication
+
+UCP profiles serve dual purpose: they declare a party's **capabilities** for negotiation (see [Profile Structure](#profile-structure)) and publish **signing keys** for identity verification — enabling both capability negotiation and cryptographic authentication from a single document.
+
+Businesses publish their profile at `/.well-known/ucp` as the discovery entry point — platforms fetch it to determine protocol support, locate endpoints, and negotiate capabilities. Platforms advertise their profile URL per-request via the `UCP-Agent` header, enabling businesses to negotiate capabilities and verify identity. This design enables **permissionless onboarding** — any platform with a discoverable profile can interact with any business without prior registration.
+
+### Authentication Mechanisms
+
+Businesses **SHOULD** authenticate platforms to prevent impersonation and ensure message integrity. UCP is compatible with multiple authentication mechanisms:
+
+- **API Keys** — Pre-shared secrets exchanged out-of-band
+- **OAuth 2.0** — Client credentials or other OAuth flows
+- **mTLS** — Mutual TLS with client certificates
+- **HTTP Message Signatures** — Cryptographic signatures per [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421) (see [Message Signatures](https://ucp.dev/draft/specification/signatures/index.md) for full specification)
+
+HTTP Message Signatures enable permissionless onboarding — businesses can verify platforms by their advertised public keys without negotiating shared secrets. The other mechanisms require prior credential exchange and imply a pre-established relationship.
+
+Business-to-platform webhooks **MUST** be signed. See [Message Signatures — When Signatures Apply](https://ucp.dev/draft/specification/signatures/#when-signatures-apply).
+
+#### Identity Binding
+
+Regardless of authentication mechanism, verifiers **MUST** ensure the authenticated identity is consistent with the `UCP-Agent` header:
+
+- **HTTP Message Signatures** — The signer's profile (from `UCP-Agent`) is verified by signature validation; no additional check needed.
+- **API keys / OAuth / mTLS** — Verifiers **MUST** confirm the authenticated principal is authorized to act on behalf of the profile identified in `UCP-Agent`. Reject requests where the authenticated identity and claimed profile conflict.
+
+### Key Discovery
+
+Both parties publish public keys in the `signing_keys` array of their UCP profile. Platforms fetch the business profile at `/.well-known/ucp`; businesses fetch the platform profile from the `UCP-Agent` header. The same profile that provides capabilities also provides verification keys — this is UCP's key resolution mechanism for [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421) HTTP Message Signatures.
+
+**Key Lookup:**
+
+1. Obtain the signer's profile URL
+1. Fetch profile (or serve from cache)
+1. Extract `keyid` from `Signature-Input` and match to `kid` in `signing_keys[]`
+1. Verify signature using the corresponding public key
+
+For key format (JWK), supported algorithms, key rotation procedures, and complete signing/verification mechanics, see [Message Signatures](https://ucp.dev/draft/specification/signatures/index.md).
+
+### Profile Requirements
+
+#### Hosting
+
+Both profiles must be reliably hosted. An unreliable or misconfigured profile endpoint may prevent the other party from processing requests.
+
+1. Profiles **MUST** be served over HTTPS.
+1. Profile endpoints **MUST NOT** use redirects (3xx).
+1. Profile responses **MUST** include a `Cache-Control` header with `public` and `max-age` of at least 60 seconds. Profiles **MUST NOT** be served with `private`, `no-store`, or `no-cache` directives.
+
+Profiles represent a party's stable identity and capabilities. Profile URLs are expected to remain consistent across requests and not contain per-transaction or per-session configuration — the caching policy above enforces this by requiring shared cache support with a minimum TTL.
+
+#### Fetching
+
+Businesses fetch platform profiles to perform capability negotiation and verify identity. UCP defines best practices that enable permissionless onboarding, but businesses retain full control over their access policies and **MAY** enforce additional rules based on established trust, observed behavior, or operational requirements.
+
+Businesses **SHOULD** maintain a registry of pre-approved platforms — platforms whose profiles have been validated and whose trust is established through out-of-band mechanisms (API key, OAuth credential, mTLS certificate, or prior vetting). Known platforms can be served efficiently based on cached identity and capabilities, and are not subject to discovery budget constraints.
+
+When a platform is *not recognized*, it triggers dynamic profile discovery. Businesses **SHOULD** establish a fixed discovery footprint so that resource consumption for resolving unrecognized platforms remains constant regardless of how many platforms request access. Strategies include:
+
+- **Fixed-size profile cache** (e.g., LRU) — bounds memory regardless of the number of unique profile URLs encountered
+- **Global rate limit** on discovery fetches — bounds outbound network without requiring per-origin state tracking
+- **Backoff on repeated failures** — reduces retries to persistently unavailable or malicious profile endpoints
+- **Asynchronous discovery** — defer profile resolution by responding with a `503` status code and `Retry-After` header, and resolve the profile in the background; when the platform retries, the validated profile is cached and capability negotiation proceeds synchronously
+
+When fetching profiles, the following apply:
+
+1. Implementations **MUST** reject profile URLs not served over HTTPS.
+1. Implementations **MUST NOT** follow redirects (3xx) on profile fetches.
+1. Implementations **SHOULD** enforce connect and response timeouts on profile fetches.
+1. Implementations **SHOULD** cache profiles with a minimum TTL floor of 60 seconds, regardless of the origin's `Cache-Control` headers.
+1. Implementations **MAY** refresh profiles asynchronously using stale-while-revalidate semantics.
+1. On signature verification failure with an unknown `kid`, implementations **MAY** force-refresh the cached profile — but **MUST NOT** do so more than once per TTL floor per origin.
+
+If a profile cannot be fetched (timeout, DNS failure, 5xx) or fails validation (invalid schema, signing keys, signature mismatch), businesses **MUST** reject the request with an appropriate error and status code (see [Error Handling](#error-handling)).
 
 ## Payment Architecture
 
@@ -720,6 +897,8 @@ Payment Handlers are **specifications** (not entities) that define how payment i
 Payment handlers allow for a variety of different payment instruments and token-types to be supported, including network tokens. They are standardized definitions typically authored by payment credential providers or the UCP governing body.
 
 **Dynamic Filtering:** Businesses **MUST** filter the `handlers` list based on the context of the cart (e.g., removing "Buy Now Pay Later" for subscription items, or filtering regional methods based on shipping address).
+
+**Available Instrument Resolution:** Within each active handler, both the platform and the business independently advertise `available_instruments` — the set of instrument types and constraints each party supports. The business is responsible for resolving these into an authoritative value in the checkout response. The platform's declaration (from its profile) signals what it can handle; the business intersects that with its own `business_schema` declaration and cart context, then returns the resolved result. Platforms **MUST** treat the `available_instruments` in the response as authoritative for that checkout. See the [Payment Handler Guide](https://ucp.dev/draft/specification/payment-handler-guide/#resolving-available_instruments) for the full resolution semantics.
 
 ### Risk Signals
 
@@ -787,6 +966,9 @@ In this scenario, the platform identifies a payment credential provider (e.g., `
         {
           "id": "shop_pay_1234",
           "version": "2026-01-11",
+          "available_instruments": [
+            {"type": "shop_pay"}
+          ],
           "config": {
             "shop_id": "shopify-559128571",
             "environment": "production"
@@ -860,6 +1042,14 @@ In this scenario, the platform uses a generic tokenizer to request a session tok
           "version": "2026-01-11",
           "spec": "https://example.com/specs/tokenizer",
           "schema": "https://example.com/schemas/tokenizer.json",
+          "available_instruments": [
+            {
+              "type": "card",
+              "constraints": {
+                "brands": ["visa", "mastercard"]
+              }
+            }
+          ],
           "config": {
             "token_url": "https://api.psp.com/tokens",
             "public_key": "pk_123"
@@ -931,7 +1121,10 @@ This scenario demonstrates the **Recommended Flow for Agents**. Instead of a ses
           "id": "ap2_234352",
           "version": "2026-01-11",
           "spec": "https://ucp.dev/specs/ap2-handler",
-          "schema": "https://ucp.dev/schemas/ap2-handler.json"
+          "schema": "https://ucp.dev/schemas/ap2-handler.json",
+          "available_instruments": [
+            {"type": "ap2_mandate"}
+          ]
         }
       ]
     }
@@ -1056,7 +1249,7 @@ UCP supports multiple transport protocols. Platforms and businesses effectively 
 
 ### REST Transport (Core)
 
-The primary transport for UCP is **HTTP/1.1** (or higher) using RESTful patterns.
+UCP supports **HTTP/1.1** (or higher) using RESTful patterns.
 
 - **Content-Type:** Requests and responses **MUST** use `application/json`.
 - **Methods:** Implementations **MUST** use standard HTTP verbs (e.g., `POST` for creation, `GET` for retrieval).
@@ -1064,7 +1257,54 @@ The primary transport for UCP is **HTTP/1.1** (or higher) using RESTful patterns
 
 ### Model Context Protocol (MCP)
 
-UCP capabilities map 1:1 to MCP tools. A business **MAY** expose an MCP server that wraps their UCP implementation, allowing LLMs to call tools like `create_checkout` directly.
+UCP supports **[MCP protocol](https://modelcontextprotocol.io/specification/)**, which operates over JSON-RPC.
+
+#### Request Format
+
+MCP requests use the `tools/call` method with the operation name in `params.name` and UCP payload in `params.arguments`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "create_checkout",
+    "arguments": {
+      "meta": {"ucp-agent": {"profile": "https://..."}},
+      "checkout": {"line_items": [...]}
+    }
+  },
+  "id": 1
+}
+```
+
+#### Response Format
+
+MCP tool responses use a dual-output pattern for backward compatibility. UCP MCP servers:
+
+- **MUST** return the UCP response payload in `structuredContent`
+- **SHOULD** declare `outputSchema` in tool definitions, referencing the appropriate UCP JSON Schema for the capability
+- **SHOULD** also return serialized JSON in `content[]` for backward compatibility with clients not supporting `structuredContent`
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "structuredContent": {
+      "checkout": {
+        "ucp": {"version": "2026-01-11", "capabilities": {...}},
+        "id": "checkout_abc123",
+        "status": "incomplete",
+        ...
+      }
+    },
+    "content": [
+      {"type": "text", "text": "{\"checkout\":{\"ucp\":{...},\"id\":\"checkout_abc123\",...}}"}
+    ]
+  }
+}
+```
 
 ### Agent-to-Agent Protocol (A2A)
 
@@ -1090,16 +1330,11 @@ UCP defines a set of standard capabilities:
 
 Detailed definitions for endpoints, schemas, and valid extensions for each capability are provided in their respective specification files. Extensions are typically versioned and defined alongside their parent capability.
 
-## Security & Authentication
+## Security
 
 ### Transport Security
 
 All UCP communication **MUST** occur over **HTTPS**.
-
-### Request Authentication
-
-- **Platform to Business:** Requests **SHOULD** be authenticated using standard headers (e.g., `Authorization: Bearer <token>`).
-- **Business to Platform (Webhooks):** Webhooks **MUST** be signed using a shared secret or asymmetric key to verify integrity and origin.
 
 ### Data Privacy
 

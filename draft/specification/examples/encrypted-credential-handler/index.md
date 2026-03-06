@@ -36,33 +36,33 @@ ______________________________________________________________________
 ### Pattern Flow
 
 ```text
-┌─────────────────┐                              ┌────────────┐
-│  Platform       │                              │  Business  │
-│                 │                              │            │
-└────────┬────────┘                              └──────┬─────┘
-         │                                              │
-         │  1. Business registers public key (out-of-band)
-         │<─────────────────────────────────────────────│
-         │                                              │
-         │  2. Confirmation                             │
-         │─────────────────────────────────────────────>│
-         │                                              │
-         │  3. GET ucp.payment_handlers                 │
-         │─────────────────────────────────────────────>│
-         │                                              │
-         │  4. Handler with business identity           │
-         │<─────────────────────────────────────────────│
-         │                                              │
-         │  5. Platform's vaulting service encrypts     │
-         │     credential with business's key           │
-         │                                              │
-         │  6. POST checkout with EncryptedCredential   │
-         │─────────────────────────────────────────────>│
-         │                                              │
-         │       (Business decrypts locally)            │
-         │                                              │
-         │  7. Checkout complete                        │
-         │<─────────────────────────────────────────────│
++-----------------+                              +------------+
+|  Platform       |                              |  Business  |
+|                 |                              |            |
++--------+--------+                              +------+-----+
+         |                                              |
+         |  1. Business registers public key (out-of-band)
+         |<---------------------------------------------|
+         |                                              |
+         |  2. Confirmation                             |
+         |--------------------------------------------->|
+         |                                              |
+         |  3. GET ucp.payment_handlers                 |
+         |--------------------------------------------->|
+         |                                              |
+         |  4. Handler with business identity           |
+         |<---------------------------------------------|
+         |                                              |
+         |  5. Platform's vaulting service encrypts     |
+         |     credential with business's key           |
+         |                                              |
+         |  6. POST checkout with EncryptedCredential   |
+         |--------------------------------------------->|
+         |                                              |
+         |       (Business decrypts locally)            |
+         |                                              |
+         |  7. Checkout complete                        |
+         |<---------------------------------------------|
 ```
 
 ______________________________________________________________________
@@ -119,6 +119,14 @@ The only supported instrument schema is [CardPaymentInstrument](https://ucp.dev/
           "version": "2026-01-11",
           "spec": "https://platform.example.com/ucp/encrypted-handler.json",
           "schema": "https://platform.example.com/ucp/encrypted-handler/schema.json",
+          "available_instruments": [
+            {
+              "type": "card",
+              "constraints": {
+                "brands": ["visa", "mastercard"]
+              }
+            }
+          ],
           "config": {
             "environment": "production",
             "business_id": "merchant_abc123",
@@ -146,6 +154,16 @@ The response config includes information about the encryption used.
 
 ```json
 {
+  "id": "platform_encrypted",
+  "version": "2026-01-11",
+  "available_instruments": [
+    {
+      "type": "card",
+      "constraints": {
+        "brands": ["visa", "mastercard"]
+      }
+    }
+  ],
   "config": {
     "environment": "production",
     "business_id": "merchant_abc123",
@@ -209,6 +227,14 @@ Platforms advertise this handler in their UCP profile's `payment_handlers` regis
           "version": "2026-01-11",
           "spec": "https://platform.example.com/ucp/encrypted-handler.json",
           "schema": "https://platform.example.com/ucp/encrypted-handler/schema.json",
+          "available_instruments": [
+            {
+              "type": "card",
+              "constraints": {
+                "brands": ["visa", "mastercard", "amex", "discover"]
+              }
+            }
+          ],
           "config": {
             "environment": "production",
             "platform_id": "platform_abc123",
