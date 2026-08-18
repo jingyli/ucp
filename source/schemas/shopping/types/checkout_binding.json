@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ucp.dev/schemas/shopping/types/checkout_binding.json",
+  "title": "Checkout Binding",
+  "description": "Binds a token to a specific checkout session and participant. Prevents token reuse across different checkouts or participants.",
+  "allOf": [
+    {
+      "$ref": "../../common/types/binding.json"
+    },
+    {
+      "type": "object",
+      "required": [
+        "type",
+        "checkout_id"
+      ],
+      "properties": {
+        "type": {
+          "const": "dev.ucp.shopping.checkout",
+          "description": "The binding type identifier for checkout-scoped bindings."
+        },
+        "checkout_id": {
+          "type": "string",
+          "description": "The checkout session identifier this token is bound to."
+        }
+      }
+    }
+  ]
+}

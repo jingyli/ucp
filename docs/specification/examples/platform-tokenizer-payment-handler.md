@@ -279,6 +279,7 @@ Authorization: Bearer {business_api_key}
 {
   "token": "ptok_x9y8z7w6v5u4",
   "binding": {
+    "type": "dev.ucp.shopping.checkout",
     "checkout_id": "checkout_789"
   }
 }
@@ -474,6 +475,7 @@ Authorization: Bearer {psp_api_key}
 {
   "token": "ptok_x9y8z7w6v5u4",
   "binding": {
+    "type": "dev.ucp.shopping.checkout",
     "checkout_id": "checkout_789",
     "identity": {
       "access_token": "business_abc123"

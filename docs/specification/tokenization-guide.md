@@ -92,14 +92,37 @@ which lifecycle policy you use:
 ### Binding
 
 All tokenization requests require a `binding` object that ties the token to a
-specific context:
+specific context. Binding is polymorphic: the `type` discriminator names the
+capability that owns the bound resource, and that capability defines the
+resource identifier fields.
 
-| Field         | Required    | Description                                                                                     |
-| :------------ | :---------- | :---------------------------------------------------------------------------------------------- |
-| `checkout_id` | Yes         | The checkout session this token is valid for                                                    |
-| `identity`    | Conditional | The participant identity to bind to; required when caller acts on behalf of another participant |
+| Field      | Required    | Description                                                                                     |
+| :--------- | :---------- | :---------------------------------------------------------------------------------------------- |
+| `type`     | Yes         | The binding type; the capability name that owns the bound resource                              |
+| `identity` | Conditional | The participant identity to bind to; required when caller acts on behalf of another participant |
 
-The tokenizer **MUST** verify binding matches on `/detokenize`. See [Binding Schema](site:schemas/shopping/types/binding.json).
+Shopping checkouts use the `dev.ucp.shopping.checkout` binding type, which adds
+a required `checkout_id`:
+
+| Field         | Required | Description                                     |
+| :------------ | :------- | :---------------------------------------------- |
+| `checkout_id` | Yes      | The checkout session this token is valid for    |
+
+The tokenizer **MUST** verify binding matches on `/detokenize`. Verification is
+exact equality over the whole binding object, including `type`, not semantic
+validation of the referenced resource: a tokenizer cannot confirm that a
+checkout exists. Comparing `type` is what prevents cross-type confusion, where a
+resource identifier from one capability collides with an identifier from
+another. A tokenizer **MUST NOT** reject a binding solely because it does not
+recognize the `type`; it stores the object and compares it on detokenization.
+
+See [Binding Schema](site:schemas/common/types/binding.json) and
+[Checkout Binding Schema](site:schemas/shopping/types/checkout_binding.json).
+
+A capability outside shopping defines its own binding type by extending the base
+schema with a `type` constant equal to its capability name and whatever resource
+identifier it owns. Tokenization handlers need no change to accept it: they
+already treat `binding` as opaque.
 
 ---
 
@@ -111,7 +134,7 @@ payload example, which defines its own mechanism to encrypt.
 
 ### POST /tokenize
 
-Converts a raw credential into a token bound to a checkout and identity.
+Converts a raw credential into a token bound to a resource and identity.
 
 **When to implement:** Always, unless you are an agent generating tokens
 internally.
@@ -131,6 +154,7 @@ Content-Type: application/json
     "cvc": "123"
   },
   "binding": {
+    "type": "dev.ucp.shopping.checkout",
     "checkout_id": "abc123",
     "identity": {
       "access_token": "merchant_001"
@@ -164,6 +188,7 @@ Authorization: Bearer {caller_access_token}
 {
   "token": "tok_abc123xyz789",
   "binding": {
+    "type": "dev.ucp.shopping.checkout",
     "checkout_id": "abc123"
   }
 }
@@ -195,8 +220,8 @@ See the full [OpenAPI specification](site:handlers/tokenization/openapi.json) fo
 
 | Requirement                  | Description                                                                                |
 | :--------------------------- | :----------------------------------------------------------------------------------------- |
-| **Binding required**         | Credentials **MUST** be bound to `checkout_id` and participant `identity` to prevent reuse |
-| **Binding verified**         | Tokenizer **MUST** verify binding matches before returning credentials                     |
+| **Binding required**         | Credentials **MUST** be bound to a resource (`binding.type` plus its identifier) and participant `identity` to prevent reuse |
+| **Binding verified**         | Tokenizer **MUST** verify the whole binding object, `type` included, matches before returning credentials |
 | **Cryptographically random** | Use secure random generators; tokens must be unguessable                                   |
 | **Sufficient length**        | Minimum 128 bits of entropy                                                                |
 | **Non-reversible**           | Cannot derive the credential from the token                                                |
@@ -256,9 +281,10 @@ A tokenizer handler conforms to this pattern if it:
 - [ ] Documents credential transformation between source and checkout forms
 - [ ] Produces tokens compatible with the `TokenCredential` schema
 - [ ] Specifies token lifecycle policy (TTL, single-use, etc.)
-- [ ] Requires `binding` with `checkout_id` on tokenization requests
+- [ ] Requires `binding` with a `type` and its resource identifier on tokenization requests
 - [ ] Uses `PaymentIdentity` for participant identification
-- [ ] Verifies `binding` matches on detokenization requests
+- [ ] Verifies the whole `binding` object, `type` included, matches on detokenization requests
+- [ ] Accepts binding types it does not recognize, storing and comparing them opaquely
 - [ ] Requires security acknowledgements from participants receiving raw credentials
 
 ---
@@ -269,7 +295,8 @@ A tokenizer handler conforms to this pattern if it:
 | :---------------------- | :-------------------------------------------------------------------------------------------------------------- |
 | Tokenization OpenAPI    | [handlers/tokenization/openapi.json](site:handlers/tokenization/openapi.json)                                   |
 | Identity Schema         | [schemas/common/types/payment_identity.json](site:schemas/common/types/payment_identity.json)                   |
-| Binding Schema          | [schemas/shopping/types/binding.json](site:schemas/shopping/types/binding.json)                                 |
+| Binding Schema          | [schemas/common/types/binding.json](site:schemas/common/types/binding.json)                                     |
+| Checkout Binding Schema | [schemas/shopping/types/checkout_binding.json](site:schemas/shopping/types/checkout_binding.json)               |
 | Token Credential Schema | [schemas/common/types/token_credential.json](site:schemas/common/types/token_credential.json)                   |
 | Card Instrument Schema  | [schemas/common/types/card_payment_instrument.json](site:schemas/common/types/card_payment_instrument.json)     |
 
